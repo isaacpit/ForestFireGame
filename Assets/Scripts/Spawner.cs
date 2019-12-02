@@ -2,103 +2,66 @@
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using TMPro;
 
 public class Spawner : MonoBehaviour
 {
-    public int xGridWdith = 10;
-    public int zGridWidth = 7;
+    // public int xGridWidth = 10;
+    // public int zGridWidth = 7;
     public GameObject ground;
-    public float minDistanceBetweenTrees, maxFireRange;
-    public Tree TreePrefab;
+    public float minDistanceBetweenTrees;
+    public float WindSpeed = -1; //Enter -1 for a random Wind Speed
+    public float WindDirection = -1; //-1: Random 0:None 1:N 2:NE 3:E 4:SE 5:S 6:SW 7:W 8:NW
+    public TextMeshProUGUI windSpeed;
+    public WindScript windDisplay;
+    //public Tree TreePrefab;
+    public List<Tree> TreePrefabs = new List<Tree>();
     public int TreeCount;
-
     public Tree HousePrefab;
     public int HouseCount;
     public float minDistanceAwayFromHouse;
 
-    private List<Tree> trees = new List<Tree>();
+    public List<Tree> trees = new List<Tree>();
     public GameObject ObjectPool;
 
-    // Start is called before the first frame update
+    [SerializeField] GameObject treeSpawnBox;
 
+    [SerializeField] GameObject houseSpawnBox;
+
+    [SerializeField] List<ElementSpawner> houseSpawners;
+
+    [SerializeField] List<ElementSpawner> treeSpawners;
+
+    // Start is called before the first frame update
     void Start()
     {
         StartGame();
     }
+
     void StartGame()
     {
-        ground.transform.localScale = new Vector3(xGridWdith * 10, 1, zGridWidth * 10);
-        ground.GetComponent<Renderer>().material.mainTextureScale = new Vector2(xGridWdith, zGridWidth);
 
+        // ground.transform.localScale = new Vector3(xGridWidth * 10, 0.5f, zGridWidth * 10);
+        // ground.GetComponent<Renderer>().material.mainTextureScale = new Vector2(xGridWidth, zGridWidth);
+
+        
+        Vector2 TotalWind = CalculateWind();
+        //Spawn Houses
         bool exitForLoop = false;
 
-        //Spawn Trees
-        for (int i = 0; i < TreeCount; i++)
-        {
-            bool validSpot;
-            float x, z;
-            int loopCount = 0;
+        exitForLoop = false;
 
-            //Look for open spot
-            do
-            {
-                loopCount++;
-                validSpot = true;
-                x = Random.Range(-((xGridWdith*5) - .5f), ((xGridWdith*5) - .5f));
-                z = Random.Range(-((zGridWidth*5) - .5f), ((zGridWidth*5) - .5f));
-
-                //checks if spot is valid
-                for (int j = 0; j < trees.Count; j++)
-                {
-                    if (Vector2.Distance(new Vector2(x, z), new Vector2(trees[j].transform.position.x, trees[j].transform.position.z)) <= minDistanceBetweenTrees){
-                        Debug.Log("Tree spawn at (" + x + ", " + z + ") blocked by existing tree at (" + trees[j].transform.position.x + ", " + trees[j].transform.position.z + ")");
-                        validSpot = false;
-                    }
-                }
-
-                //Exit if stuck and can't find open spot
-                if (loopCount >= 2000)
-                {
-                    exitForLoop = true;
-                    validSpot = true;
-                    Debug.Log("Maximum number of trees at: " + i);
-                }
-            } while (!validSpot);
-
-            //create tree in new spot
-            Tree newTree = Instantiate(TreePrefab, new Vector3(x, 4.0f, z), Quaternion.identity);
-            //Tree newTree = Instantiate(TreePrefab, ObjectPool.transform);
-            //newTree.transform.position = new Vector3(x, 4.15f, z);
-            trees.Add(newTree);
-            if (exitForLoop) break;
-            if (i == 0) newTree.FireState = 1;
+        // spawn houses
+        for (int i = 0; i < houseSpawners.Count; ++i) {
+          houseSpawners[i].SpawnElements(TotalWind);
         }
 
-        //Spawn Houses
-        for (int i = 0; i < HouseCount; ++i)
-        {
-            Tree newHouse = Instantiate(HousePrefab, new Vector3(Random.Range(-((xGridWdith * 5) - .5f), ((xGridWdith * 5) - .5f)), 2.25f, Random.Range(-((zGridWidth * 5) - .5f), ((zGridWidth * 5) - .5f))), Quaternion.identity);
-            trees.Add(newHouse);
-
-            for (int t = 0; t < trees.Count; t++)
-            {
-                if (Vector3.Distance(newHouse.transform.position, trees[t].transform.position) < minDistanceAwayFromHouse && trees[t] != newHouse)
-                {
-                    Tree temp = trees[t];
-                    trees.Remove(temp);
-                    Destroy(temp.gameObject);
-                }
-            }
+        for (int i = 0; i < treeSpawners.Count; ++i) {
+          treeSpawners[i].SpawnElements(TotalWind);
         }
 
-        //Create list of adjacent trees
-        /*for (int i = 0; i < trees.Count; i++)
-        {
-            for (int j = 0; j < trees.Count; j++)
-            {
-                if (i != j && Vector3.Distance(trees[i].transform.position, trees[j].transform.position) <= maxFireRange) trees[i].adjacentTrees.Add(trees[j]);
-            }
-        }*/
+        ManagerSpawner.Instance.StartFire();
+        // trees[HouseCount + 1].FireState = 1;
     }
 
     // Update is called once per frame
@@ -117,5 +80,48 @@ public class Spawner : MonoBehaviour
             Destroy(trees[i].gameObject);
         }
         StartGame();
+    }
+
+    Vector2 CalculateWind()
+    {
+        int xDir = Random.Range(-1, 1);
+        int zDir = Random.Range(-1, 1);
+        float power;
+        if (WindSpeed == -1)
+        {
+            power = Random.Range(1.0f, 10.0f);
+        }else
+        {
+            power = WindSpeed;
+        }
+        
+        windSpeed.text = power.ToString("F0") + " MPH";
+        if ((xDir == 0 && zDir == 0 && WindDirection == -1) || WindDirection == 0)
+        {
+            windSpeed.gameObject.SetActive(false);
+            windDisplay.gameObject.SetActive(false);
+        } else if ((xDir == 1 && zDir == 0 && WindDirection == -1) || WindDirection == 3)
+        {
+            windDisplay.initialDirection = 315;
+        } else if ((xDir == 1 && zDir == -1 && WindDirection == -1) || WindDirection == 4)
+        {
+            windDisplay.initialDirection = 270;
+        } else if ((xDir == 0 && zDir == -1 && WindDirection == -1) || WindDirection == 5)
+        {
+            windDisplay.initialDirection = 225;
+        } else if ((xDir == -1 && zDir == -1 && WindDirection == -1) || WindDirection == 6)
+        {
+            windDisplay.initialDirection = 180;
+        } else if ((xDir == -1 && zDir == 0 && WindDirection == -1) || WindDirection == 7)
+        {
+            windDisplay.initialDirection = 135;
+        } else if ((xDir == -1 && zDir == 1 && WindDirection == -1) || WindDirection == 8)
+        {
+            windDisplay.initialDirection = 90;
+        }else if ((xDir == 0 && zDir == 1 && WindDirection == -1) || WindDirection == 1)
+        {
+            windDisplay.initialDirection = 45;
+        }
+        return new Vector2((float)(xDir * (power / 10.0f)), (float)(zDir * (power / 10.0f)));
     }
 }
